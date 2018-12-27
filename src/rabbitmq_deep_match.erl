@@ -4,20 +4,19 @@
 
 -behaviour(rabbit_exchange_type).
 
--rabbit_boot_step({?MODULE,
-                   [{description, "exchange type deep match"},
-                    {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"x-deepmatch">>, ?MODULE]}},
-                    {requires,    rabbit_registry},
-                    {enables,     kernel_ready}]}).
-
-%% TODO (zwade): Figure out what this is/does
 -rabbit_boot_step(
-   {rabbit_exchange_type_deep_match_mnesia,
+  {?MODULE,
+    [{description, "exchange type deep match"},
+      {mfa,      {rabbit_registry, register, [exchange, <<"x-deepmatch">>, ?MODULE]}},
+      {requires, rabbit_registry},
+      {enables,  kernel_ready}]}).
+
+-rabbit_boot_step(
+  {rabbit_exchange_type_deep_match_mnesia,
     [{description, "exchange type x-deepmatch: mnesia"},
-     {mfa,         {?MODULE, init, []}},
-     {requires,    database},
-     {enables,     external_infrastructure}]}).
+      {mfa,         {?MODULE, init, []}},
+      {requires,    database},
+      {enables,     external_infrastructure}]}).
 
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, validate_binding/2,
@@ -25,8 +24,6 @@
          remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
 -export([info/1, info/2]).
--export([start/2]).
-
 
 -record(deep_match_trie_node, {trie_node, edge_count, binding_count}).
 -record(deep_match_trie_edge, {trie_edge, node_id}).
@@ -107,7 +104,6 @@ internal_add_binding(#binding{source = X, key = K, destination = D}) ->
     ok.
 
 trie_longest_match(X, Words) ->
-  io:fwrite("Hello World!~n"),
   Matches = trie_match(X, Words),
   case Matches of
     [] -> [];
@@ -333,7 +329,3 @@ init() ->
     TNames = [T || {T, _} <- Tables],
     mnesia:wait_for_tables(TNames, 30000),
     ok.
-
-start(_a, _b) ->
-    io:fwrite("Start????~n"),
-    ignore.
