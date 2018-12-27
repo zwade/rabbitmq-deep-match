@@ -1,115 +1,38 @@
-# RabbitMQ Reverse Topic Exchange Type #
+# RabbitMQ Deep Match Exchange Type
 
-This plugin adds a __reverse topic exchange__ type to [RabbitMQ](http://www.rabbitmq.com). The exchange type is `x-rtopic`.
+## Original
 
-The idea is to be able to specify routing patterns when publishing messages. With the default topic exchange patterns are only accepted when binding queues to exchanges.
+This plugin is a fork of [rabbitmq/rabbitmq-rtopic-exchange](https://github.com/rabbitmq/rabbitmq-rtopic-exchange).
 
-With this plugin you can decide which queues receive the message at publishing time. With the default topic exchange the decision is made during queue binding.
+## Description
 
-With this exchange your routing keys will be words separated by dots, and the binding keys will be words separated by dots as well, with the difference that on the routing keys
-you can provide special characters like the `#` or the `*`. The hash `#` will match zero or more words. The star `*` will match one word.
+This plugin creates a new exchange type called `x-deepmatch` which, routes exchange messages according to a longest shared prefix. The intent of this plugin is to enable the usage of a "most-specific-first" routing algorithm. For instance, if one has a queue that knows how to handle `entity.vehicle` and another that knows how to handle `entity.vehicle.car`, if we insert something into the queue with routing key `entity.vehicle.car.honda`, it should be routed to the latter queue.
 
-## Usage ##
+### Examples
 
-If we have the following setup, (we assume the exchange is of type _rtopic_):
+Say that we have three queues bound to our exchange
 
-- Queue _A_ bound to exchange _rtopic_ with routing key `"server1.app1.mod1.info"`.
-- Queue _B_ bound to exchange _rtopic_ with routing key `"server1.app1.mod1.error"`.
-- Queue _C_ bound to exchange _rtopic_ with routing key `"server1.app2.mod1.info"`.
-- Queue _D_ bound to exchange _rtopic_ with routing key `"server2.app2.mod1.warning"`.
-- Queue _E_ bound to exchange _rtopic_ with routing key `"server1.app1.mod2.info"`.
-- Queue _F_ bound to exchange _rtopic_ with routing key `"server2.app1.mod1.info"`.
+ - `A` has routing key `entity.vehicle`
+ - `B` has routing key `entity.vehicle.car`
+ - `C` has routing key `entity.vehicle.plane`
 
-Then we execute the following message publish actions.
+Then here is how different messages will be routed
 
-```erlang
-%% Parameter order is: message, exchange name and routing key.
+ - `entity.vehicle` --> `A`
+ - `entity.vehicle.car` --> `B`
+ - `entity.vehicle.boat` --> `A`
+ - `entity.vehicle.plane.boeing` --> `C`
+ - `entity.*.car` --> `B`
+ - `entity.vehicle.*` --> **Arbitrarily** between `B` and `C`
+ - `entity` --> Dropped
+ - ` ` --> Dropped
 
-basic_publish(Msg, "rtopic", "server1.app1.mod1.info").
-%% message is only received by queue A.
+## Future Work
 
-basic_publish(Msg, "rtopic", "*.app1.mod1.info").
-%% message is received by queue A and F.
+Note that currently no steps are taken to restore messages in a queue that is lost or unbound. Future work may be taken to reinsert all messages that would be lost due to this. 
 
-basic_publish(Msg, "rtopic", "#.info").
-%% message is received by queue A, C, E and F.
+## Authors
 
-basic_publish(Msg, "rtopic", "#.mod1.info").
-%% message is received by queue A, C, and F.
+The original work is (c) Pivotal Software Inc., 2007-2016 and originally developed by Alvaro Videla.
 
-basic_publish(Msg, "rtopic", "#").
-%% message is received by every queue bound to the exchange.
-
-basic_publish(Msg, "rtopic", "server1.app1.mod1.*").
-%% message is received by queues A and B.
-
-basic_publish(Msg, "rtopic", "server1.app1.#").
-%% message is received by queues A, B and E.
-```
-
-The exchange type used when declaring an exchange is `x-rtopic`.
-
-## Installation and Binary Builds
-
-This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).
-Please consult the docs on [how to install RabbitMQ plugins](http://www.rabbitmq.com/plugins.html#installing-plugins).
-
-Then enable the plugin:
-
-```bash
-rabbitmq-plugins enable rabbitmq_rtopic_exchange
-```
-
-## Building from Source
-
-See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
-
-TL;DR: running
-
-    make dist
-
-will build the plugin and put build artifacts under the `./plugins` directory.
-
-
-## Examples and Tests
-
-To run the tests use `make tests`.
-
-The test suite can also be used for code examples.
-
-## Performance ##
-
-Internally the plugin uses a trie like data structure, so the following has to be taken into account when binding either queues or exchanges to it.
-
-The following applies if you have **thousands** of queues. After some benchmarks I could see that performance degraded for +1000 bindings. So if you have say, 100 bindings to this exchange, then performance should be acceptable in most cases. In any case, running your own benchmarks wont hurt. The file `rabbit_rtopic_perf.erl` has some precarious tools to run benchmarks that I ought to document at some point.
-
-A trie performs better when doing _prefix_ searches than _suffix_ searches. For example we have the following bindings:
-
-```
-a0.b0.c0.d0
-a0.b0.c1.d0
-a0.b1.c0.d0
-a0.b1.c1.d0
-a0.b0.c2.d1
-a0.b0.c2.d0
-a0.b0.c2.d1
-a0.b0.c3.d0
-a1.b0.c0.d0
-a1.b1.c0.d0
-```
-
-If we publish a message with the following routing key: `"a0.#"`, it's the same as asking "find me all the routing keys that start with `"a0"`. After the algorithm descended on level in the trie, then it needs to visit every node in the trie. So the longer the prefix, the faster the routing will behave. That is, queries of the kind "find all string with prefix", will go faster, the longer the prefix is.
-
-On the other hand if we publish a message with the routing key `"#.d0"`, it's the same as asking "find me all the bindings with suffix `"d0"`. That would be terribly slow to do with a trie, but there's a trick. If you need to use this exchange for this kind of routing, then you can build your bindings in reverse, therefore you could do a "all prefixes" query instead of a "all suffixes" query.
-
-If you have the needs for routing `"a0.#.c0.d0.#.f0.#"` then again, with a small amount of binding keys it should be a problem, but keep in mind that the longer the gaps represented by the `#` character, the slower the algorithm will run. AFAIK there's no easy solution for this problem.
-
-## License
-
-See LICENSE.
-
-## Copyright
-
-(c) Pivotal Software Inc., 2007-2016.
-
-Originally developed by Alvaro Videla.
+This fork is written and maintained by @zwade
