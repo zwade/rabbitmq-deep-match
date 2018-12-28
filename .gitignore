@@ -12,3 +12,4 @@ erl_crash.dump
 /xrefr
 
 rabbitmq_rtopic_exchange.d
+rabbitmq_deep_match.d
